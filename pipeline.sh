@@ -211,8 +211,8 @@ if [ ! -e .map.done ]; then
     		bn=$(basename $f _noAdap_primer.fq)
     		# Run bwa mem and then sort then sort the bam by coordinates.
 		# M: mark shorter split hits as secondary
-    		echo "(bwa aln $HUMANGENOME $ADAPTER/ALUV1/${bn}_noAdap_primer.fq > ${bn}_noAdap_primer_hg38.UCSC.sai; bwa samse -f ${bn}_noAdap_primer_hg38.UCSC.sam $HUMANGENOME ${bn}_noAdap_primer_hg38.UCSC.sai $ADAPTER/ALUV1/${bn}_noAdap_primer.fq; samtools view -u ${bn}_noAdap_primer_hg38.UCSC.sam | samtools sort -n -O bam  | samtools fixmate -r -p -m - - | samtools sort - | samtools markdup -r - ${bn}_hg38.UCSC.markdup.bam  )"
-  	done | xsbatch -c 1 --mem-per-cpu=10G -J line -R --max-array-jobs=10 --
+    		echo "(bwa aln $HUMANGENOME $ADAPTER/ALUV1/${bn}_noAdap_primer.fq > ${bn}_noAdap_primer_hg38.UCSC.sai; bwa samse -f ${bn}_noAdap_primer_hg38.UCSC.sam $HUMANGENOME ${bn}_noAdap_primer_hg38.UCSC.sai $ADAPTER/ALUV1/${bn}_noAdap_primer.fq; samtools view -u ${bn}_noAdap_primer_hg38.UCSC.sam | samtools fixmate -r -p -m - - | samtools sort - | samtools markdup -r - ${bn}_noAdap_primer_hg38.UCSC.markdup.bam  )"
+  	done | xsbatch -c 1 --mem-per-cpu=10G -J aluv1 -R --max-array-jobs=10 --
   touch .map.done
 fi
 
@@ -227,10 +227,65 @@ if [ ! -e .map.done ]; then
 	# Discard any reads that are orphans of a pair, so keep only valid pairs
   	for f in $ADAPTER/ALUV2/*_noAdap_primer.fq;
   		do
-    		bn=$(basename $f *_noAdap_primer.fq)
+    		bn=$(basename $f _noAdap_primer.fq)
     		# Run bwa mem and then sort then sort the bam by coordinates.
 		# M: mark shorter split hits as secondary
-    		echo "(bwa aln $HUMANGENOME $ADAPTER/ALUV2/${bn}_noAdap_primer.fq > ${bn}_noAdap_primer_hg38.UCSC.sai; bwa samse -f ${bn}_noAdap_primer_hg38.UCSC.sam $HUMANGENOME ${bn}_noAdap_primer_hg38.UCSC.sai $ADAPTER/ALUV2/${bn}_noAdap_primer.fq; samtools view -u ${bn}_noAdap_primer_hg38.UCSC.sam | samtools sort -n -O bam  | samtools fixmate -r -p -m - - | samtools sort - | samtools markdup -r - ${bn}_hg38.UCSC.markdup.bam )"
-  	done | xsbatch -c 1 --mem-per-cpu=10G -J line -R --max-array-jobs=10 --
+    		echo "(bwa aln $HUMANGENOME $ADAPTER/ALUV2/${bn}_noAdap_primer.fq > ${bn}_noAdap_primer_hg38.UCSC.sai; bwa samse -f ${bn}_noAdap_primer_hg38.UCSC.sam $HUMANGENOME ${bn}_noAdap_primer_hg38.UCSC.sai $ADAPTER/ALUV2/${bn}_noAdap_primer.fq; samtools view -u ${bn}_noAdap_primer_hg38.UCSC.sam | samtools fixmate -r -p -m - - | samtools sort - | samtools markdup -r - ${bn}_noAdap_primer_hg38.UCSC.markdup.bam )"
+  	done | xsbatch -c 1 --mem-per-cpu=10G -J aluv2 -R --max-array-jobs=10 --
   touch .map.done
 fi
+
+
+
+################################## MAP DAMAGE ##########################################
+
+mapDamage -i $bam -r $reference  -rescale
+
+echo "Running map Damage"
+# -p: no error if existing 
+mkdir -p $MAPDAMAGE && cd $MAPDAMAGE
+
+## ALUV1
+ALUV1DAM=$MAPDAMAGE/ALUV1
+mkdir -p $ALUV1DAM && cd $ALUV1DAM
+# Check if the adapter removal is done, if yes then this file must exist.
+# If it does, skip this step, if not then perform cutadapt steps.
+if [ ! -e .dam.done ]; then
+	# For each fastq pair, do cutadapt
+	for f in $MAP/ALUV1/*.markdup.bam; 
+		do
+		# Figure out the name of the sample.
+		bn=$(basename $f .markdup.bam )
+    		
+		## Run Map Damage
+		# parameter can be optionally used to rescale quality scores of likely damaged positions in the reads. A new BAM file is constructed by downscaling quality values for misincorporations likely due to ancient DNA damage according to their initial qualities, position in reads and damage patterns.
+   		echo "mapDamage -i $f -r $HUMANGENOME --rescale "
+  	done | xsbatch -c 1 --mem-per-cpu=2G -R -J ALUV1dam --
+ 	touch .dam.done
+fi
+
+
+## ALUV2
+ALUV2DAM=$MAPDAMAGE/ALUV2
+mkdir -p $ALUV2DAM && cd $ALUV2DAM
+# Check if the adapter removal is done, if yes then this file must exist.
+# If it does, skip this step, if not then perform cutadapt steps.
+if [ ! -e .dam.done ]; then
+	# For each fastq pair, do cutadapt
+	for f in $MAP/ALUV2/*.markdup.bam 
+		do
+		# Figure out the name of the sample.
+		bn=$(basename $f .markdup.bam )
+    		
+		## Run Map Damage
+		# parameter can be optionally used to rescale quality scores of likely damaged positions in the reads. A new BAM file is constructed by downscaling quality values for misincorporations likely due to ancient DNA damage according to their initial qualities, position in reads and damage patterns.
+   		echo "mapDamage -i $f -r $HUMANGENOME --rescale "
+  	done | xsbatch -c 1 --mem-per-cpu=2G -R -J ALUV2dam --
+ 	touch .dam.done
+fi
+
+
+xsbatch -c 1 --mem-per-cpu=2G -J paleomix --paleomix bam_pipeline run paloemix_P56.yaml
+
+
+##### WE ARE HERE
